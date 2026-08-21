@@ -28,6 +28,8 @@ create table leads (
     created_at timestamptz not null default now()
 );
 
+alter table leads add constraint one_phone_per_shop unique (phone, shop_id);
+
 create table deliveries (
     id uuid primary key default gen_random_uuid(),
     created_at timestamptz not null default now(),
@@ -39,3 +41,24 @@ create table deliveries (
 
     status text not null default 'created'
 );
+
+create view delivery_details as
+select
+  d.id             as delivery_id,
+  d.created_at     as delivery_created_at,
+  d.status         as delivery_status,
+  d.delivery_address,
+  d.shop_data,
+  s.id             as shop_id,
+  s.name           as shop_name,
+  s.vat_number     as shop_vat_number,
+  s.status         as shop_status,
+  l.id             as lead_id,
+  l.phone          as lead_phone,
+  l.created_at     as lead_created_at,
+  l.customer_id    as customer_id,
+  c.name           as customer_name
+from deliveries d
+join leads l   on l.id = d.lead_id
+join shops s   on s.id = l.shop_id
+left join customers c on c.id = l.customer_id;

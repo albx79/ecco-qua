@@ -8,4 +8,4 @@ flyway.cleanDisabled = false
 
 [flyway]
 environment = "local" # It is recommended to configure environment as a commandline argument. This allows using different environments depending on the caller.
-locations = ["filesystem:migrations"]
+locations = ["filesystem:db/migrations"]

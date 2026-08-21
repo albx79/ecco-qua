@@ -1,80 +1,77 @@
 import { Hono } from "hono";
-import { html } from "hono/html";
-import { sql } from "./db";
+import { findShopById } from "./shops";
+import { getOrCreateLead } from "./leads";
+import { Layout } from "./layout";
 
 const app = new Hono();
 
-app.get("/", (c) => {
-    return c.text("Hello Hono!");
-});
-
 app.get("/s/:shopId", async (c) => {
     const shopId = c.req.param("shopId");
-
-    type ShopRow = {
-        id: string;
-        name: string;
-        address: string;
-        status: string;
-    };
-
-    console.log(`Getting shop ${shopId}`);
-
-    const [shop] = await sql<ShopRow[]>`
-    select id, name, address, status
-    from shops
-    where id = ${shopId}
-    `;
-
+    const shop = await findShopById(shopId);
     if (!shop) {
         return c.notFound();
     }
 
     return c.html(
-        <html lang="it">
-            <head>
-                <link
-                    rel="stylesheet"
-                    href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
-                />
-                <meta charset="utf-8" />
-                <meta
-                    name="viewport"
-                    content="width=device-width, initial-scale=1"
-                />
-                <title>Ecco Qua - {shop.name}</title>
-            </head>
-            <body>
-                <main>
-                    <h1>Ecco Qua</h1>
-                    <p>
-                        <strong>{shop.name}</strong>
-                        <br />
-                        {shop.address}
-                    </p>
-                    <p>
-                        Troppo grande per portarlo a casa?
-                        <br />
-                        Te lo spediamo noi!
-                    </p>
-                    <form method="post" action={`/s/${shop.id}/customer`}>
-                        <label for="phone">Numero di telefono</label>
+        <Layout title={`Ecco Qua — ${shop.name}`}>
+            <h2>{shop.name}</h2>
 
-                        <input
-                            id="phone"
-                            name="phone"
-                            type="tel"
-                            inputmode="tel"
-                            autocomplete="tel"
-                            placeholder="+39 333 1234567"
-                            required
-                        />
+            <p>{shop.address}</p>
 
-                        <button type="submit">Avanti →</button>
-                    </form>
-                </main>
-            </body>
-        </html>,
+            <p>
+                Troppo grande per portarlo a casa?
+                <br />
+                Te lo spediamo noi!
+            </p>
+
+            <form method="post" action={`/s/${shop.id}/customer`}>
+                <label htmlFor="phone">Numero di telefono</label>
+
+                <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    required
+                />
+
+                <button type="submit">Avanti →</button>
+            </form>
+        </Layout>,
+    );
+});
+
+app.post("/s/:shopId/customer", async (c) => {
+    const shopId = c.req.param("shopId");
+
+    const body = await c.req.parseBody();
+    const phone = body["phone"];
+
+    if (typeof phone !== "string" || phone.trim() === "") {
+        return c.text("Numero di telefono obbligatorio", 400);
+    }
+
+    const normalizedPhone = phone.trim();
+
+    // Verify that the shop exists.
+    const shop = await findShopById(shopId);
+    if (!shop) {
+        return c.notFound();
+    }
+
+    const lead = await getOrCreateLead(phone, shopId);
+
+    return c.html(
+        <Layout title={`Ecco Qua — ${shop.name}`}>
+            <p>Ciao! Il tuo numero è:</p>
+
+            <p>
+                <strong>{lead.phone}</strong>
+            </p>
+
+            <p>Lead ID: {lead.id}</p>
+        </Layout>,
     );
 });
 
