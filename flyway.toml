@@ -4,23 +4,8 @@
 url = "jdbc:postgresql://localhost:5552/db"
 user = "user"
 password = "password"
-# driver =
-# schemas =
-# connectRetries =
-# connectRetriesInterval =
-# initSql =
-# jdbcProperties =
-# resolvers =
+flyway.cleanDisabled = false
 
 [flyway]
 environment = "local" # It is recommended to configure environment as a commandline argument. This allows using different environments depending on the caller.
 locations = ["filesystem:migrations"]
-# jarDirs = ["path/to/java/migrations"]
-
-# [environments.build]
-# url = "jdbc:sqlite::memory:"
-# user = "buildUser"
-# password = "buildPassword"
-
-# [flyway.check]
-# buildEnvironment = "build"

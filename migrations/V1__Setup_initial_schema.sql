@@ -23,20 +23,19 @@ create table addresses (
 create table leads (
     id uuid primary key default gen_random_uuid(),
     phone text not null,
+    shop_id uuid not null references shops(id),
     customer_id uuid references customers(id),
     created_at timestamptz not null default now()
 );
 
-create table delivery (
+create table deliveries (
     id uuid primary key default gen_random_uuid(),
     created_at timestamptz not null default now(),
 
-    lead_id uuid not null references leads(id),
-    shop_id uuid not null references shops(id),
-    customer_id uuid references customers(id),
+    lead_id uuid unique not null references leads(id),
     delivery_address text not null,
     
-    shop_data jsonb, -- shop-dependent order details (e.g. S/M/L, weight class, etc)
+    shop_data jsonb, -- shop-dependent order details (e.g. S/M/L, weight class, etc), to be detailed later
 
     status text not null default 'created'
 );
