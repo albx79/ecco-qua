@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { findShopById } from "./shops";
-import { getOrCreateLead } from "./leads";
-import { Layout } from "./layout";
+import { findLead, getOrCreateLead } from "./leads";
+import { actionStyle, Layout } from "./layout";
 
 const app = new Hono();
 
@@ -34,9 +34,12 @@ app.get("/s/:shopId", async (c) => {
                     inputMode="tel"
                     autoComplete="tel"
                     required
+                    autofocus
                 />
 
-                <button type="submit">Avanti →</button>
+                <div style={actionStyle}>
+                    <button type="submit">Avanti →</button>
+                </div>
             </form>
         </Layout>,
     );
@@ -60,17 +63,55 @@ app.post("/s/:shopId/customer", async (c) => {
         return c.notFound();
     }
 
-    const lead = await getOrCreateLead(phone, shopId);
+    const lead = await getOrCreateLead(normalizedPhone, shopId);
+    return c.redirect(`/customer/${lead.id}/address`);
+});
+
+app.get("/customer/:leadId/address", async (c) => {
+    const leadId = c.req.param("leadId");
+    const lead = await findLead(leadId);
+    if (!lead) {
+        return c.notFound();
+    }
 
     return c.html(
-        <Layout title={`Ecco Qua — ${shop.name}`}>
-            <p>Ciao! Il tuo numero è:</p>
+        <Layout title={`Ecco Qua — ${lead.shopName}`}>
+            <h2>Dove vuoi ricevere il tuo acquisto?</h2>
+            <form method="post" action={`/customer/${leadId}/address`}>
+                <label htmlFor="name">Nome</label>
+                <input
+                    id="name"
+                    name="name"
+                    type="text"
+                    inputMode="text"
+                    autocomplete="name"
+                    autocapitalize="words"
+                    spellcheck={false}
+                    required
+                    autofocus
+                />
 
-            <p>
-                <strong>{lead.phone}</strong>
-            </p>
+                <label htmlFor="address">Indirizzo</label>
+                <textarea
+                    id="address"
+                    name="address"
+                    rows={3}
+                    autocomplete="street-address"
+                    autocapitalize="words"
+                    spellcheck={false}
+                ></textarea>
 
-            <p>Lead ID: {lead.id}</p>
+                <div style={actionStyle}>
+                    <button type="submit">Avanti →</button>
+                </div>
+            </form>
+            <hr/>
+            <form method="post" action={`/customer/${leadId}/login`}>
+                <div style={actionStyle}>
+                    <p>Hai già un account?</p>
+                    <button type="submit">Accedi 🔑︎</button>
+                </div>
+            </form>
         </Layout>,
     );
 });

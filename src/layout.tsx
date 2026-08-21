@@ -1,41 +1,38 @@
 import type { FC } from "hono/jsx";
 
 type LayoutProps = {
-  title: string;
-  children: unknown;
+    title: string;
+    children: unknown;
 };
 
-export const Layout: FC<LayoutProps> = ({
-  title,
-  children,
-}) => {
-  return (
-    <html lang="it">
-      <head>
-        <meta charSet="UTF-8" />
+export const actionStyle = { textAlign: 'right' } as const;
 
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1.0"
-        />
+export const Layout: FC<LayoutProps> = ({ title, children }) => {
+    return (
+        <html lang="it">
+            <head>
+                <meta charSet="UTF-8" />
 
-        <title>{title}</title>
+                <meta
+                    name="viewport"
+                    content="width=device-width, initial-scale=1.0"
+                />
 
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
-        />
-      </head>
+                <title>{title}</title>
 
-      <body>
-        <header>
-          <h1>Ecco Qua</h1>
-        </header>
+                <link
+                    rel="stylesheet"
+                    href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
+                />
+            </head>
 
-        <main>
-          {children}
-        </main>
-      </body>
-    </html>
-  );
+            <body>
+                <header>
+                    <h1>Ecco Qua</h1>
+                </header>
+
+                <main>{children}</main>
+            </body>
+        </html>
+    );
 };
