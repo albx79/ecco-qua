@@ -137,7 +137,7 @@ app.post("/customer/:leadId/address", async (c) => {
         }
     }
 
-    const deliveryId = await createDelivery(leadId, address);
+    const deliveryId = (await createDelivery(leadId, address)).deliveryId;
 
     return c.redirect(`/customer/deliveries/${deliveryId}`);
 });
@@ -154,7 +154,7 @@ app.get("/customer/deliveries/:deliveryId", async c => {
             <p>{delivery.deliveryAddress}</p>
             <p>Status: <strong>{delivery.status}</strong></p>
             <p>Mostra al cassiere questo codice a barre e noi gestiremo tutto automaticamente:</p>
-            <p><Barcode code="041234567890?" /></p>
+            <p><Barcode code={`${delivery.sku}?`} /></p>
             <p>Aumenta al massimo la luminosità dello schermo per facilitare la lettura del codice.</p>
         </Layout>
     );
