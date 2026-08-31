@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { findShopById } from "./shops";
 import { findLead, getOrCreateLead } from "./leads";
-import { actionStyle, Layout } from "./layout";
+import { actionStyle, Barcode, Layout } from "./layout";
+import { createDelivery, getDelivery } from "./deliveries";
 
 const app = new Hono();
 
@@ -105,7 +106,7 @@ app.get("/customer/:leadId/address", async (c) => {
                     <button type="submit">Avanti →</button>
                 </div>
             </form>
-            <hr/>
+            <hr />
             <form method="post" action={`/customer/${leadId}/login`}>
                 <div style={actionStyle}>
                     <p>Hai già un account?</p>
@@ -113,6 +114,49 @@ app.get("/customer/:leadId/address", async (c) => {
                 </div>
             </form>
         </Layout>,
+    );
+});
+
+app.post("/customer/:leadId/address", async (c) => {
+    const leadId = c.req.param("leadId");
+    const lead = await findLead(leadId);
+    if (!lead) {
+        return c.notFound();
+    }
+
+    const body = await c.req.parseBody();
+    const name = body["name"];
+    const address = body["address"] as string;
+
+    for (const [p_name, p_value] of [
+        ["name", name],
+        ["address", address],
+    ]) {
+        if (typeof p_value !== "string" || p_value.trim() === "") {
+            return c.text(`${p_name} obbligatorio`, 400);
+        }
+    }
+
+    const deliveryId = await createDelivery(leadId, address);
+
+    return c.redirect(`/customer/deliveries/${deliveryId}`);
+});
+
+app.get("/customer/deliveries/:deliveryId", async c => {
+    const deliveryId = c.req.param("deliveryId");
+    console.log(`getting delivery ${deliveryId}`);
+    const delivery = await getDelivery(deliveryId);
+    console.log(`got ${JSON.stringify(delivery)}`); // string form
+    
+    return c.html(
+        <Layout title="Delivery">
+            <h2>La tua prossima consegna</h2>
+            <p>{delivery.deliveryAddress}</p>
+            <p>Status: <strong>{delivery.status}</strong></p>
+            <p>Mostra al cassiere questo codice a barre e noi gestiremo tutto automaticamente:</p>
+            <p><Barcode code="041234567890?" /></p>
+            <p>Aumenta al massimo la luminosità dello schermo per facilitare la lettura del codice.</p>
+        </Layout>
     );
 });
 

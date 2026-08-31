@@ -1,10 +1,15 @@
 create table shops (
     id uuid primary key default gen_random_uuid(),
+    created_at timestamptz not null default now(),
     vat_number text not null,
     name text not null,
     address text not null,
     status text not null default 'onboarding',
-    phone text
+    phone text,
+    sku_range int8range not null,
+    check(not isempty(sku_range)),
+    check(NOT lower_inf(sku_range)),
+    check(NOT upper_inf(sku_range))
 );
 
 create unique index shop_vat_number_unique on shops(vat_number);
@@ -40,6 +45,16 @@ create table deliveries (
     shop_data jsonb, -- shop-dependent order details (e.g. S/M/L, weight class, etc), to be detailed later
 
     status text not null default 'created'
+);
+
+create table open_barcodes (
+    shop_id uuid not null references shops(id),
+    sku int8 not null,
+    delivery_id uuid not null references deliveries(id),
+    created_at timestamptz not null default now(),
+
+    primary key (shop_id, sku),
+    unique (delivery_id)
 );
 
 create view delivery_details as
