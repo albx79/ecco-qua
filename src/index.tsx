@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { findShopById } from "./shops";
 import { findLead, getOrCreateLead } from "./leads";
 import { actionStyle, Barcode, Layout } from "./layout";
-import { createDelivery, getDelivery } from "./deliveries";
+import {
+    addressFields,
+    createDelivery,
+    Delivery,
+    getDeliveriesOfShop,
+    getDelivery,
+} from "./deliveries";
 
 const app = new Hono();
 
@@ -97,10 +103,37 @@ app.get("/customer/:leadId/address", async (c) => {
                     id="address"
                     name="address"
                     rows={3}
-                    autocomplete="street-address"
+                    autocomplete="address-line1"
                     autocapitalize="words"
                     spellcheck={false}
                 ></textarea>
+
+                <label htmlFor="province">Provincia</label>
+                <input type="text"
+                    id="province"
+                    name="province"
+                    autocomplete="address-level1"
+                    autocapitalize="words"
+                    spellcheck={false}
+                ></input>
+
+                <label htmlFor="city">Città</label>
+                <input type="text"
+                    id="city"
+                    name="city"
+                    autocomplete="address-level2"
+                    autocapitalize="words"
+                    spellcheck={false}
+                ></input>
+
+                <label htmlFor="postal_code">CAP</label>
+                <input type="text"
+                    id="postal_code"
+                    name="postal_code"
+                    autocomplete="postal-code"
+                    autocapitalize="words"
+                    spellcheck={false}
+                ></input>
 
                 <div style={actionStyle}>
                     <button type="submit">Avanti →</button>
@@ -126,7 +159,18 @@ app.post("/customer/:leadId/address", async (c) => {
 
     const body = await c.req.parseBody();
     const name = body["name"];
-    const address = body["address"] as string;
+    // const address = body["address"] as string;
+    const address: { [field: string]: string; } = {};
+
+    for (const field of addressFields) {
+        const value = body[field];
+        if (typeof value !== "string" || value.trim() === "") {
+          return c.text(`${field} obbligatorio`, 400);
+        }
+        address[field] = value as string;
+    }
+    
+    // const address = ["recipient_name", "address_line1", "postal_code", "city", "province"].map(field => [field, body[field] as string]);
 
     for (const [p_name, p_value] of [
         ["name", name],
@@ -142,21 +186,61 @@ app.post("/customer/:leadId/address", async (c) => {
     return c.redirect(`/customer/deliveries/${deliveryId}`);
 });
 
-app.get("/customer/deliveries/:deliveryId", async c => {
+app.get("/customer/deliveries/:deliveryId", async (c) => {
     const deliveryId = c.req.param("deliveryId");
     console.log(`getting delivery ${deliveryId}`);
     const delivery = await getDelivery(deliveryId);
     console.log(`got ${JSON.stringify(delivery)}`); // string form
-    
+
     return c.html(
         <Layout title="Delivery">
             <h2>La tua prossima consegna</h2>
             <p>{delivery.deliveryAddress}</p>
-            <p>Status: <strong>{delivery.status}</strong></p>
-            <p>Mostra al cassiere questo codice a barre e noi gestiremo tutto automaticamente:</p>
-            <p><Barcode code={`${delivery.sku}?`} /></p>
-            <p>Aumenta al massimo la luminosità dello schermo per facilitare la lettura del codice.</p>
-        </Layout>
+            <p>
+                Status: <strong>{delivery.status}</strong>
+            </p>
+            <p>
+                Mostra al cassiere questo codice a barre e noi gestiremo tutto
+                automaticamente:
+            </p>
+            <p>
+                <Barcode code={`${delivery.sku}?`} />
+            </p>
+            <p>
+                Aumenta al massimo la luminosità dello schermo per facilitare la
+                lettura del codice.
+            </p>
+        </Layout>,
+    );
+});
+
+app.get("/shop/:shopId/deliveries", async (c) => {
+    const shopId = c.req.param("shopId");
+    const shop = (await findShopById(shopId))!;
+    const deliveries = await getDeliveriesOfShop(shopId);
+    console.log(`listing ${deliveries.length} deliveries`)
+    return c.html(
+        <Layout title="Deliveries">
+            <h2>
+                Consegne da <em>{shop.name}</em>
+            </h2>
+            <table>
+                <thead>
+                    <td>Nome</td>
+                    <td>Città</td>
+                    <td>Fase</td>
+                </thead>
+                <tbody>
+                    {deliveries.map((d) => (
+                        <tr id={d.id}>
+                            <td>TODO name</td>
+                            <td>{d.deliveryAddress}</td>
+                            <td>{d.status}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </Layout>,
     );
 });
 

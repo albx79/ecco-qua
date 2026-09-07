@@ -1,11 +1,9 @@
 create table shops (
-    id uuid primary key default gen_random_uuid(),
-    created_at timestamptz not null default now(),
-    vat_number text not null,
+    like base_template including all,
+    like address_template including defaults including constraints,
     name text not null,
-    address text not null,
+    vat_number text not null,
     status text not null default 'onboarding',
-    phone text,
     sku_range int8range not null,
     check(not isempty(sku_range)),
     check(NOT lower_inf(sku_range)),
@@ -15,36 +13,40 @@ create table shops (
 create unique index shop_vat_number_unique on shops(vat_number);
 
 create table customers (
-    id uuid primary key default gen_random_uuid(),
+    like base_template including all,
     name text not null
 );
 
-create table addresses (
-    id uuid primary key default gen_random_uuid(),
+create table customer_addresses (
+    like base_template including all,
+    like address_template including defaults including constraints,
     customer_id uuid not null references customers(id),
-    address text not null
+    is_default boolean not null default false
 );
 
+create index customer_addresses_customer_id_idx on customer_addresses(customer_id);
+
+create unique index customer_addresses_one_default_per_customer
+  on customer_addresses (customer_id)
+  where is_default;
+
 create table leads (
-    id uuid primary key default gen_random_uuid(),
+    like base_template including all,
     phone text not null,
     shop_id uuid not null references shops(id),
     customer_id uuid references customers(id),
-    created_at timestamptz not null default now()
+    constraint one_phone_per_shop unique (phone, shop_id)
 );
 
-alter table leads add constraint one_phone_per_shop unique (phone, shop_id);
+create index leads_shop_id_idx on leads(shop_id);
+create index leads_customer_id_idx on leads(customer_id);
 
 create table deliveries (
-    id uuid primary key default gen_random_uuid(),
-    created_at timestamptz not null default now(),
-
+    like base_template including all,
+    like address_template including defaults including constraints,
     lead_id uuid unique not null references leads(id),
-    delivery_address text not null,
-    
-    shop_data jsonb, -- shop-dependent order details (e.g. S/M/L, weight class, etc), to be detailed later
-
-    status text not null default 'created'
+    status text not null default 'created',
+    shop_data jsonb -- shop-dependent order details (e.g. S/M/L, weight class, etc), to be detailed later
 );
 
 create table open_barcodes (
@@ -62,7 +64,14 @@ select
   d.id             as delivery_id,
   d.created_at     as delivery_created_at,
   d.status         as delivery_status,
-  d.delivery_address,
+  d.recipient_name,
+  d.address_line1,
+  d.address_line2,
+  d.postal_code,
+  d.city,
+  d.province,
+  d.country_code,
+  d.phone          as recipient_phone,
   d.shop_data,
   s.id             as shop_id,
   s.name           as shop_name,
