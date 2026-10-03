@@ -1,23 +1,11 @@
 import { sql } from "./db";
 
-export type Shop = {
-    id: string;
-    name: string;
-    address: string;
-    status: string;
-};
-
-export async function findShopById(id: string): Promise<Shop | undefined> {
-    console.log(`Getting shop ${id}`);
-
-    const shops = await sql<Shop[]>`
-    select id, name, address, status
-    from shops
-    where id = ${id}
-    and status = 'active'
-  `;
-
-    console.log(`Got ${shops}`);
-
-    return shops[0];
+export async function findShopById(id: string) {
+    const [shop] = await sql<{ id: string; name: string; 'addressLine1': string; postalCode: string; city: string; status: string }[]>`
+      select id, name, address_line1 as "addressLine1", postal_code as "postalCode", city, status
+      from shops
+      where id = ${id}::uuid
+      and status = 'active'
+    `;
+    return shop;
 }

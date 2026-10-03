@@ -1,45 +1,27 @@
 import { sql } from "./db";
 
-export type Lead = {
-    id: string;
-    phone: string;
-    shopId: string;
-    customerId: string | null;
-};
-
-export async function getOrCreateLead(
-    phone: string,
-    shopId: string,
-): Promise<Lead> {
-  const leads = await sql<Lead[]>`
-    insert into leads (phone, shop_id)
-    values (${phone}, ${shopId})
-    on conflict (phone, shop_id)
-    do update set phone = excluded.phone, shop_id = excluded.shop_id
-    returning
-      id,
-      phone,
-      shop_id as "shopId",
-      customer_id as "customerId"
-  `;
-
-  return leads[0]!;
+export async function getOrCreateLead(phone: string, shopId: string) {
+    const [lead] = await sql<{ id: string; phone: string; shopId: string; customerId: string | null }[]>`
+      insert into leads (phone, shop_id)
+      values (${phone}, ${shopId}::uuid)
+      on conflict (phone, shop_id)
+      do update set phone = excluded.phone, shop_id = excluded.shop_id
+      returning
+        id,
+        phone,
+        shop_id as "shopId",
+        customer_id as "customerId"
+    `;
+    return lead;
 }
 
-export type LeadAndShop = {
-    leadId: string,
-    shopId: string,
-    shopName: string,
-    phone: string,
-    customerId: string | null,
-    skuRange: string
-}
-
-export async function findLead(id: string): Promise<LeadAndShop | undefined> {
-    const leads = await sql<LeadAndShop[]>`
-      select l.id as "leadId", l.phone, customer_id as "customerId", shop_id as "shopId", s.name as "shopName", s.sku_range as "skuRange"
+export async function findLead(id: string) {
+    const [lead] = await sql<{ leadId: string; phone: string; customerId: string | null; shopId: string; shopName: string; skuRange: string }[]>`
+      select l.id as "leadId", l.phone, l.customer_id as "customerId", l.shop_id as "shopId",
+             s.name as "shopName", s.sku_range as "skuRange"
       from leads l
       join shops s on l.shop_id = s.id
-      where l.id = ${id}`;
-    return leads[0]!;
+      where l.id = ${id}::uuid
+    `;
+    return lead;
 }

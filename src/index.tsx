@@ -3,9 +3,9 @@ import { findShopById } from "./shops";
 import { findLead, getOrCreateLead } from "./leads";
 import { actionStyle, Barcode, Layout } from "./layout";
 import {
+    Address,
     addressFields,
     createDelivery,
-    Delivery,
     getDeliveriesOfShop,
     getDelivery,
 } from "./deliveries";
@@ -23,7 +23,9 @@ app.get("/s/:shopId", async (c) => {
         <Layout title={`Ecco Qua — ${shop.name}`}>
             <h2>{shop.name}</h2>
 
-            <p>{shop.address}</p>
+            <p>
+                {shop.addressLine1}, {shop.postalCode} {shop.city}
+            </p>
 
             <p>
                 Troppo grande per portarlo a casa?
@@ -85,10 +87,10 @@ app.get("/customer/:leadId/address", async (c) => {
         <Layout title={`Ecco Qua — ${lead.shopName}`}>
             <h2>Dove vuoi ricevere il tuo acquisto?</h2>
             <form method="post" action={`/customer/${leadId}/address`}>
-                <label htmlFor="name">Nome</label>
+                <label htmlFor="recipient_name">Nome</label>
                 <input
-                    id="name"
-                    name="name"
+                    id="recipient_name"
+                    name="recipient_name"
                     type="text"
                     inputMode="text"
                     autocomplete="name"
@@ -98,10 +100,10 @@ app.get("/customer/:leadId/address", async (c) => {
                     autofocus
                 />
 
-                <label htmlFor="address">Indirizzo</label>
+                <label htmlFor="address_line1">Indirizzo</label>
                 <textarea
-                    id="address"
-                    name="address"
+                    id="address_line1"
+                    name="address_line1"
                     rows={3}
                     autocomplete="address-line1"
                     autocapitalize="words"
@@ -158,27 +160,13 @@ app.post("/customer/:leadId/address", async (c) => {
     }
 
     const body = await c.req.parseBody();
-    const name = body["name"];
-    // const address = body["address"] as string;
-    const address: { [field: string]: string; } = {};
-
+    const address = {} as Address;
     for (const field of addressFields) {
         const value = body[field];
         if (typeof value !== "string" || value.trim() === "") {
-          return c.text(`${field} obbligatorio`, 400);
+            return c.text(`${field} obbligatorio`, 400);
         }
-        address[field] = value as string;
-    }
-    
-    // const address = ["recipient_name", "address_line1", "postal_code", "city", "province"].map(field => [field, body[field] as string]);
-
-    for (const [p_name, p_value] of [
-        ["name", name],
-        ["address", address],
-    ]) {
-        if (typeof p_value !== "string" || p_value.trim() === "") {
-            return c.text(`${p_name} obbligatorio`, 400);
-        }
+        address[field] = value.trim();
     }
 
     const deliveryId = (await createDelivery(leadId, address)).deliveryId;
@@ -190,12 +178,20 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
     const deliveryId = c.req.param("deliveryId");
     console.log(`getting delivery ${deliveryId}`);
     const delivery = await getDelivery(deliveryId);
-    console.log(`got ${JSON.stringify(delivery)}`); // string form
+    if (!delivery) {
+        return c.notFound();
+    }
 
     return c.html(
         <Layout title="Delivery">
             <h2>La tua prossima consegna</h2>
-            <p>{delivery.deliveryAddress}</p>
+            <p>
+                {delivery.recipientName}
+                <br />
+                {delivery.addressLine1}
+                <br />
+                {delivery.postalCode} {delivery.city} {delivery.province}
+            </p>
             <p>
                 Status: <strong>{delivery.status}</strong>
             </p>
@@ -216,7 +212,10 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
 
 app.get("/shop/:shopId/deliveries", async (c) => {
     const shopId = c.req.param("shopId");
-    const shop = (await findShopById(shopId))!;
+    const shop = await findShopById(shopId);
+    if (!shop) {
+        return c.notFound();
+    }
     const deliveries = await getDeliveriesOfShop(shopId);
     console.log(`listing ${deliveries.length} deliveries`)
     return c.html(
@@ -233,8 +232,8 @@ app.get("/shop/:shopId/deliveries", async (c) => {
                 <tbody>
                     {deliveries.map((d) => (
                         <tr id={d.id}>
-                            <td>TODO name</td>
-                            <td>{d.deliveryAddress}</td>
+                            <td>{d.recipientName}</td>
+                            <td>{d.city}</td>
                             <td>{d.status}</td>
                         </tr>
                     ))}

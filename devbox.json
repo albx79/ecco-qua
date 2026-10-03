@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.17.5/.schema/devbox.schema.json",
+  "packages": [
+    "bun@latest",
+    "flyway@latest",
+    "nodejs_22@latest",
+    "postgresql_18@latest"
+  ],
+  "env": {
+    "PGHOST": "localhost",
+    "PGPORT": "5552",
+    "PGUSER": "user",
+    "PGPASSWORD": "password",
+    "PGDATABASE": "db",
+    "DATABASE_URL": "postgres://user:password@localhost:5552/db"
+  },
+  "shell": {
+    "scripts": {
+      "db:up": "docker compose up -d --wait postgres",
+      "db:migrate": "flyway migrate",
+      "db:reset": "flyway clean migrate && psql -f db/seeds/dev.sql",
+      "dev": "bun run --hot src/index.tsx",
+      "lint": "bunx eslint src"
+    }
+  }
+}
