@@ -13,7 +13,22 @@ public transit, without needing POS or courier API integration.
 - **SQL checking:** [SafeQL](https://safeql.dev) — every `` sql`...` `` query
   is checked against the real schema at lint time, and its result type is
   generated from it
-- **Frontend:** Datastar (planned — not wired up yet)
+- **Frontend:** [Datastar](https://data-star.dev) 1.0.4 (from the CDN) with
+  server-rendered Hono JSX; live views over SSE
+
+## Live updates
+
+A trigger on `deliveries` sends `pg_notify('delivery_changed', …)` on every
+insert/update. Each server holds one `LISTEN` connection (`src/live.ts`) and
+fans the notification out to its open SSE streams, which re-render their
+fragment and send it as a `datastar-patch-elements` event; Datastar morphs it
+into the element with the same id. Pages open their stream with
+`data-init="@get('…/stream')"`.
+
+Actions don't answer with HTML: the status buttons `@post` and get a 204, and
+the new state reaches every open page — the staff list, the order page, the
+customer's phone — through its stream. So it also works across several app
+servers, since they all listen to the same database.
 
 ## Getting started
 
@@ -57,9 +72,9 @@ support TypeScript 7 yet.
       lookup by scanned barcode
 - [x] `GET /shop/:shopId/deliveries/:id` - full address and status changes
       (created → paid → shipped → delivered, or cancelled)
-- [ ] Datastar on the frontend
+- [x] Datastar on the frontend
 - [ ] Customer entry flow (phone → address → tier selection)
-- [ ] Staff dashboard (live queue via SSE)
+- [x] Staff dashboard (live queue via SSE)
 - [ ] Session/lead expiry cleanup job
 
 ## Notes

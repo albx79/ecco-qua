@@ -25,6 +25,11 @@ export const Layout: FC<LayoutProps> = ({ title, children }) => {
                     href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
                 />
 
+                <script
+                    type="module"
+                    src="https://cdn.jsdelivr.net/gh/starfederation/datastar@1.0.4/bundles/datastar.js"
+                ></script>
+
                 <link
                     href="https://fonts.googleapis.com/css2?family=Libre+Barcode+EAN13+Text&display=swap"
                     rel="stylesheet"

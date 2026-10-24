@@ -16,8 +16,15 @@ import {
     openStatuses,
     setDeliveryStatus,
     skuDigits,
-    statusTransitions,
 } from "./deliveries";
+import { liveDeliveries } from "./live";
+import {
+    CustomerDeliveryStatus,
+    DeliveriesTable,
+    formatDate,
+    ShopDeliveryStatus,
+    statusLabels,
+} from "./views";
 
 const app = new Hono();
 
@@ -185,7 +192,6 @@ app.post("/customer/:leadId/address", async (c) => {
 
 app.get("/customer/deliveries/:deliveryId", async (c) => {
     const deliveryId = c.req.param("deliveryId");
-    console.log(`getting delivery ${deliveryId}`);
     const delivery = await getDelivery(deliveryId);
     if (!delivery) {
         return c.notFound();
@@ -201,9 +207,9 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
                 <br />
                 {delivery.postalCode} {delivery.city} {delivery.province}
             </p>
-            <p>
-                Status: <strong>{delivery.status}</strong>
-            </p>
+            <div data-init={`@get('/customer/deliveries/${deliveryId}/stream')`}>
+                <CustomerDeliveryStatus status={delivery.status} />
+            </div>
             <p>
                 Mostra al cassiere questo codice a barre e noi gestiremo tutto
                 automaticamente:
@@ -219,28 +225,19 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
     );
 });
 
-const statusLabels: Record<DeliveryStatus, string> = {
-    created: "Creato",
-    paid: "Pagato",
-    shipped: "Spedito",
-    delivered: "Consegnato",
-    cancelled: "Annullato",
-};
-
-const transitionLabels: Record<DeliveryStatus, string> = {
-    created: "",
-    paid: "Segna come pagato",
-    shipped: "Segna come spedito",
-    delivered: "Segna come consegnato",
-    cancelled: "Annulla",
-};
-
-const formatDate = (d: Date) =>
-    d.toLocaleString("it-IT", {
-        timeZone: "Europe/Rome",
-        dateStyle: "short",
-        timeStyle: "short",
-    });
+app.get("/customer/deliveries/:deliveryId/stream", async (c) => {
+    const deliveryId = c.req.param("deliveryId");
+    if (!(await getDelivery(deliveryId))) {
+        return c.notFound();
+    }
+    return liveDeliveries(
+        (change) => change.deliveryId === deliveryId,
+        async () => {
+            const delivery = await getDelivery(deliveryId);
+            return String(await <CustomerDeliveryStatus status={delivery.status} />);
+        },
+    );
+});
 
 // What the scanner reads is the 13-digit EAN: the SKU plus a check digit.
 // Shorter input is a SKU typed by hand.
@@ -251,6 +248,35 @@ function parseScannedSku(input: string): string | undefined {
     }
     return digits.length === 13 ? digits.slice(0, 12) : digits;
 }
+
+type StatusFilter = "open" | "all" | DeliveryStatus;
+
+function parseStatusFilter(input: string | undefined): StatusFilter {
+    return input === "all" || isDeliveryStatus(input) ? input : "open";
+}
+
+function filterStatuses(filter: StatusFilter): readonly DeliveryStatus[] {
+    return filter === "all" ? deliveryStatuses
+        : filter === "open" ? openStatuses
+        : [filter];
+}
+
+// Registered before /shop/:shopId/deliveries/:deliveryId, which would
+// otherwise take "stream" as a delivery id.
+app.get("/shop/:shopId/deliveries/stream", async (c) => {
+    const shopId = c.req.param("shopId");
+    if (!(await findShopById(shopId))) {
+        return c.notFound();
+    }
+    const statuses = filterStatuses(parseStatusFilter(c.req.query("status")));
+    return liveDeliveries(
+        (change) => change.shopId === shopId,
+        async () => {
+            const deliveries = await getDeliveriesOfShop(shopId, statuses);
+            return String(await <DeliveriesTable shopId={shopId} deliveries={deliveries} />);
+        },
+    );
+});
 
 app.get("/shop/:shopId/deliveries", async (c) => {
     const shopId = c.req.param("shopId");
@@ -270,16 +296,12 @@ app.get("/shop/:shopId/deliveries", async (c) => {
         skuNotFound = true;
     }
 
-    const filter = c.req.query("status") ?? "open";
-    const statuses =
-        filter === "all" ? deliveryStatuses
-        : isDeliveryStatus(filter) ? [filter]
-        : openStatuses;
-    const deliveries = await getDeliveriesOfShop(shopId, statuses);
+    const filter = parseStatusFilter(c.req.query("status"));
+    const deliveries = await getDeliveriesOfShop(shopId, filterStatuses(filter));
 
-    const filters: [string, string][] = [
+    const filters: [StatusFilter, string][] = [
         ["open", "Aperti"],
-        ...deliveryStatuses.map((s): [string, string] => [s, statusLabels[s]]),
+        ...deliveryStatuses.map((s): [StatusFilter, string] => [s, statusLabels[s]]),
         ["all", "Tutti"],
     ];
 
@@ -322,36 +344,9 @@ app.get("/shop/:shopId/deliveries", async (c) => {
                 ))}
             </p>
 
-            {deliveries.length === 0 ? (
-                <p>Nessun ordine.</p>
-            ) : (
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Nome</th>
-                            <th>Città</th>
-                            <th>Codice</th>
-                            <th>Stato</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {deliveries.map((d) => (
-                            <tr id={d.id}>
-                                <td>{formatDate(d.createdAt)}</td>
-                                <td>
-                                    <a href={`/shop/${shopId}/deliveries/${d.id}`}>
-                                        {d.recipientName}
-                                    </a>
-                                </td>
-                                <td>{d.city}</td>
-                                <td>{d.sku && skuDigits(d.sku)}</td>
-                                <td>{isDeliveryStatus(d.status) ? statusLabels[d.status] : d.status}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            )}
+            <div data-init={`@get('/shop/${shopId}/deliveries/stream?status=${filter}')`}>
+                <DeliveriesTable shopId={shopId} deliveries={deliveries} />
+            </div>
         </Layout>,
     );
 });
@@ -377,8 +372,6 @@ app.get("/shop/:shopId/deliveries/:deliveryId", async (c) => {
                 Creato il {formatDate(d.createdAt)}
                 <br />
                 Codice: <strong>{d.sku ? skuDigits(d.sku) : "—"}</strong>
-                <br />
-                Stato: <strong>{statusLabels[d.status]}</strong>
             </p>
 
             <h3>Indirizzo di consegna</h3>
@@ -398,31 +391,39 @@ app.get("/shop/:shopId/deliveries/:deliveryId", async (c) => {
                 Tel. <a href={`tel:${d.phone}`}>{d.phone}</a>
             </p>
 
-            {statusTransitions[d.status].length > 0 && (
-                <form method="post" action={`/shop/${shopId}/deliveries/${d.id}/status`}>
-                    <div style={actionStyle}>
-                        {statusTransitions[d.status].map((to) => (
-                            <button type="submit" name="to" value={to}>
-                                {transitionLabels[to]}
-                            </button>
-                        ))}
-                    </div>
-                </form>
-            )}
+            <div data-init={`@get('/shop/${shopId}/deliveries/${d.id}/stream')`}>
+                <ShopDeliveryStatus shopId={shopId} delivery={{ id: d.id, status: d.status }} />
+            </div>
         </Layout>,
     );
 });
 
-app.post("/shop/:shopId/deliveries/:deliveryId/status", async (c) => {
+app.get("/shop/:shopId/deliveries/:deliveryId/stream", async (c) => {
     const shopId = c.req.param("shopId");
     const deliveryId = c.req.param("deliveryId");
-    const shop = await findShopById(shopId);
-    if (!shop) {
+    if (!(await getShopDelivery(shopId, deliveryId))) {
         return c.notFound();
     }
+    return liveDeliveries(
+        (change) => change.deliveryId === deliveryId,
+        async () => {
+            const d = await getShopDelivery(shopId, deliveryId);
+            if (!isDeliveryStatus(d.status)) {
+                throw new Error(`unknown status ${d.status}`);
+            }
+            return String(
+                await <ShopDeliveryStatus shopId={shopId} delivery={{ id: d.id, status: d.status }} />,
+            );
+        },
+    );
+});
 
-    const body = await c.req.parseBody();
-    const to = body["to"];
+// The page doesn't need anything back: the change reaches it, and every
+// other open page, through the delivery's stream.
+app.post("/shop/:shopId/deliveries/:deliveryId/status/:to", async (c) => {
+    const shopId = c.req.param("shopId");
+    const deliveryId = c.req.param("deliveryId");
+    const to = c.req.param("to");
     if (!isDeliveryStatus(to)) {
         return c.text("Stato non valido", 400);
     }
@@ -431,8 +432,8 @@ app.post("/shop/:shopId/deliveries/:deliveryId/status", async (c) => {
     if (!updated) {
         return c.text("L'ordine non può passare a questo stato", 409);
     }
-
-    return c.redirect(`/shop/${shopId}/deliveries/${deliveryId}`);
+    return c.body(null, 204);
 });
 
-export default app;
+// SSE streams sit idle between changes; Bun would close them after 10s.
+export default { fetch: app.fetch, idleTimeout: 0 };
