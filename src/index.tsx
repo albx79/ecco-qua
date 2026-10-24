@@ -6,8 +6,17 @@ import {
     Address,
     addressFields,
     createDelivery,
+    deliveryStatuses,
+    DeliveryStatus,
+    findDeliveryBySku,
     getDeliveriesOfShop,
     getDelivery,
+    getShopDelivery,
+    isDeliveryStatus,
+    openStatuses,
+    setDeliveryStatus,
+    skuDigits,
+    statusTransitions,
 } from "./deliveries";
 
 const app = new Hono();
@@ -200,7 +209,7 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
                 automaticamente:
             </p>
             <p>
-                <Barcode code={`${delivery.sku}?`} />
+                <Barcode code={`${skuDigits(delivery.sku)}?`} />
             </p>
             <p>
                 Aumenta al massimo la luminosità dello schermo per facilitare la
@@ -210,37 +219,220 @@ app.get("/customer/deliveries/:deliveryId", async (c) => {
     );
 });
 
+const statusLabels: Record<DeliveryStatus, string> = {
+    created: "Creato",
+    paid: "Pagato",
+    shipped: "Spedito",
+    delivered: "Consegnato",
+    cancelled: "Annullato",
+};
+
+const transitionLabels: Record<DeliveryStatus, string> = {
+    created: "",
+    paid: "Segna come pagato",
+    shipped: "Segna come spedito",
+    delivered: "Segna come consegnato",
+    cancelled: "Annulla",
+};
+
+const formatDate = (d: Date) =>
+    d.toLocaleString("it-IT", {
+        timeZone: "Europe/Rome",
+        dateStyle: "short",
+        timeStyle: "short",
+    });
+
+// What the scanner reads is the 13-digit EAN: the SKU plus a check digit.
+// Shorter input is a SKU typed by hand.
+function parseScannedSku(input: string): string | undefined {
+    const digits = input.replace(/\s/g, "");
+    if (!/^\d{1,13}$/.test(digits)) {
+        return undefined;
+    }
+    return digits.length === 13 ? digits.slice(0, 12) : digits;
+}
+
 app.get("/shop/:shopId/deliveries", async (c) => {
     const shopId = c.req.param("shopId");
     const shop = await findShopById(shopId);
     if (!shop) {
         return c.notFound();
     }
-    const deliveries = await getDeliveriesOfShop(shopId);
-    console.log(`listing ${deliveries.length} deliveries`)
+
+    const skuInput = c.req.query("sku");
+    let skuNotFound = false;
+    if (skuInput !== undefined && skuInput.trim() !== "") {
+        const sku = parseScannedSku(skuInput);
+        const found = sku && (await findDeliveryBySku(shopId, sku));
+        if (found) {
+            return c.redirect(`/shop/${shopId}/deliveries/${found.deliveryId}`);
+        }
+        skuNotFound = true;
+    }
+
+    const filter = c.req.query("status") ?? "open";
+    const statuses =
+        filter === "all" ? deliveryStatuses
+        : isDeliveryStatus(filter) ? [filter]
+        : openStatuses;
+    const deliveries = await getDeliveriesOfShop(shopId, statuses);
+
+    const filters: [string, string][] = [
+        ["open", "Aperti"],
+        ...deliveryStatuses.map((s): [string, string] => [s, statusLabels[s]]),
+        ["all", "Tutti"],
+    ];
+
     return c.html(
-        <Layout title="Deliveries">
+        <Layout title={`Ordini — ${shop.name}`}>
             <h2>
-                Consegne da <em>{shop.name}</em>
+                Ordini di <em>{shop.name}</em>
             </h2>
-            <table>
-                <thead>
-                    <td>Nome</td>
-                    <td>Città</td>
-                    <td>Fase</td>
-                </thead>
-                <tbody>
-                    {deliveries.map((d) => (
-                        <tr id={d.id}>
-                            <td>{d.recipientName}</td>
-                            <td>{d.city}</td>
-                            <td>{d.status}</td>
+
+            <form method="get" action={`/shop/${shopId}/deliveries`}>
+                <label htmlFor="sku">Scansiona o digita il codice a barre</label>
+                <input
+                    id="sku"
+                    name="sku"
+                    type="text"
+                    inputMode="numeric"
+                    autocomplete="off"
+                    autofocus
+                />
+                {skuNotFound && (
+                    <p>
+                        <strong>Nessun ordine con il codice {skuInput}</strong>
+                    </p>
+                )}
+                <div style={actionStyle}>
+                    <button type="submit">Cerca</button>
+                </div>
+            </form>
+
+            <p>
+                {filters.map(([value, label], i) => (
+                    <>
+                        {i > 0 && " · "}
+                        {value === filter ? (
+                            <strong>{label}</strong>
+                        ) : (
+                            <a href={`/shop/${shopId}/deliveries?status=${value}`}>{label}</a>
+                        )}
+                    </>
+                ))}
+            </p>
+
+            {deliveries.length === 0 ? (
+                <p>Nessun ordine.</p>
+            ) : (
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Nome</th>
+                            <th>Città</th>
+                            <th>Codice</th>
+                            <th>Stato</th>
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {deliveries.map((d) => (
+                            <tr id={d.id}>
+                                <td>{formatDate(d.createdAt)}</td>
+                                <td>
+                                    <a href={`/shop/${shopId}/deliveries/${d.id}`}>
+                                        {d.recipientName}
+                                    </a>
+                                </td>
+                                <td>{d.city}</td>
+                                <td>{d.sku && skuDigits(d.sku)}</td>
+                                <td>{isDeliveryStatus(d.status) ? statusLabels[d.status] : d.status}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
         </Layout>,
     );
+});
+
+app.get("/shop/:shopId/deliveries/:deliveryId", async (c) => {
+    const shopId = c.req.param("shopId");
+    const shop = await findShopById(shopId);
+    if (!shop) {
+        return c.notFound();
+    }
+    const d = await getShopDelivery(shopId, c.req.param("deliveryId"));
+    if (!d || !isDeliveryStatus(d.status)) {
+        return c.notFound();
+    }
+
+    return c.html(
+        <Layout title={`Ordine — ${d.recipientName}`}>
+            <p>
+                <a href={`/shop/${shopId}/deliveries`}>← Tutti gli ordini</a>
+            </p>
+            <h2>Ordine di {d.recipientName}</h2>
+            <p>
+                Creato il {formatDate(d.createdAt)}
+                <br />
+                Codice: <strong>{d.sku ? skuDigits(d.sku) : "—"}</strong>
+                <br />
+                Stato: <strong>{statusLabels[d.status]}</strong>
+            </p>
+
+            <h3>Indirizzo di consegna</h3>
+            <p>
+                {d.recipientName}
+                <br />
+                {d.addressLine1}
+                {d.addressLine2 && (
+                    <>
+                        <br />
+                        {d.addressLine2}
+                    </>
+                )}
+                <br />
+                {d.postalCode} {d.city} {d.province} {d.countryCode}
+                <br />
+                Tel. <a href={`tel:${d.phone}`}>{d.phone}</a>
+            </p>
+
+            {statusTransitions[d.status].length > 0 && (
+                <form method="post" action={`/shop/${shopId}/deliveries/${d.id}/status`}>
+                    <div style={actionStyle}>
+                        {statusTransitions[d.status].map((to) => (
+                            <button type="submit" name="to" value={to}>
+                                {transitionLabels[to]}
+                            </button>
+                        ))}
+                    </div>
+                </form>
+            )}
+        </Layout>,
+    );
+});
+
+app.post("/shop/:shopId/deliveries/:deliveryId/status", async (c) => {
+    const shopId = c.req.param("shopId");
+    const deliveryId = c.req.param("deliveryId");
+    const shop = await findShopById(shopId);
+    if (!shop) {
+        return c.notFound();
+    }
+
+    const body = await c.req.parseBody();
+    const to = body["to"];
+    if (!isDeliveryStatus(to)) {
+        return c.text("Stato non valido", 400);
+    }
+
+    const updated = await setDeliveryStatus(shopId, deliveryId, to);
+    if (!updated) {
+        return c.text("L'ordine non può passare a questo stato", 409);
+    }
+
+    return c.redirect(`/shop/${shopId}/deliveries/${deliveryId}`);
 });
 
 export default app;

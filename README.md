@@ -53,6 +53,10 @@ support TypeScript 7 yet.
 - [x] Postgres connection wired up
 - [x] `GET /s/:shopId` - opens the shop page to enter the phone number
 - [x] `POST /s/:shopId/customer` - starts the customer journey
+- [x] `GET /shop/:shopId/deliveries` - shop's order list, status filter,
+      lookup by scanned barcode
+- [x] `GET /shop/:shopId/deliveries/:id` - full address and status changes
+      (created → paid → shipped → delivered, or cancelled)
 - [ ] Datastar on the frontend
 - [ ] Customer entry flow (phone → address → tier selection)
 - [ ] Staff dashboard (live queue via SSE)
