@@ -18,6 +18,7 @@ import {
     skuDigits,
 } from "./deliveries";
 import { liveDeliveries } from "./live";
+import { parseScannedSku } from "./sku";
 import {
     CustomerDeliveryStatus,
     DeliveriesTable,
@@ -238,16 +239,6 @@ app.get("/customer/deliveries/:deliveryId/stream", async (c) => {
         },
     );
 });
-
-// What the scanner reads is the 13-digit EAN: the SKU plus a check digit.
-// Shorter input is a SKU typed by hand.
-function parseScannedSku(input: string): string | undefined {
-    const digits = input.replace(/\s/g, "");
-    if (!/^\d{1,13}$/.test(digits)) {
-        return undefined;
-    }
-    return digits.length === 13 ? digits.slice(0, 12) : digits;
-}
 
 type StatusFilter = "open" | "all" | DeliveryStatus;
 
