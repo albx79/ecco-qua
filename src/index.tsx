@@ -18,6 +18,7 @@ import {
     skuDigits,
 } from "./deliveries";
 import { liveDeliveries } from "./live";
+import { protectStaffRequests, requireShopStaff, staffRoutes, type StaffEnv } from "./staff";
 import { parseScannedSku } from "./sku";
 import {
     CustomerDeliveryStatus,
@@ -27,7 +28,10 @@ import {
     statusLabels,
 } from "./views";
 
-const app = new Hono();
+const app = new Hono<StaffEnv>();
+
+app.route("/staff", staffRoutes);
+app.use("/shop/:shopId/*", protectStaffRequests, requireShopStaff);
 
 app.get("/s/:shopId", async (c) => {
     const shopId = c.req.param("shopId");
@@ -266,6 +270,7 @@ app.get("/shop/:shopId/deliveries/stream", async (c) => {
             const deliveries = await getDeliveriesOfShop(shopId, statuses);
             return String(await <DeliveriesTable shopId={shopId} deliveries={deliveries} />);
         },
+        c.get("staffSessionExpiresAt"),
     );
 });
 
@@ -298,6 +303,7 @@ app.get("/shop/:shopId/deliveries", async (c) => {
 
     return c.html(
         <Layout title={`Ordini — ${shop.name}`}>
+            <p><a href="/staff">I tuoi negozi</a></p>
             <h2>
                 Ordini di <em>{shop.name}</em>
             </h2>
@@ -406,6 +412,7 @@ app.get("/shop/:shopId/deliveries/:deliveryId/stream", async (c) => {
                 await <ShopDeliveryStatus shopId={shopId} delivery={{ id: d.id, status: d.status }} />,
             );
         },
+        c.get("staffSessionExpiresAt"),
     );
 });
 

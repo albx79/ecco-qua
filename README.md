@@ -48,6 +48,24 @@ devbox run dev        # http://localhost:3000
 Visit `http://localhost:3000/s/<shop-id>` using an id from the `shops` table
 (`psql -c 'select id, name from shops'`).
 
+For the staff demo, set `AUTH_SECRET` to a random secret of at least 32
+characters before starting the server. For example, run
+`export AUTH_SECRET="$(openssl rand -hex 32)"` in the same shell as the dev
+command. Use the same secret on all server instances. Open
+`http://localhost:3000/staff/login`. The dev seed assigns each account to one shop.
+
+| Email | Password | Shop |
+| --- | --- | --- |
+| `maria@example.test` | `ecco-demo-maria` | Bottega della Maria |
+| `pino@example.test` | `ecco-demo-pino` | Panificio del Pane |
+
+Use these credentials with the dev seed only. Staff sessions use encrypted
+JWTs in HTTP-only cookies and expire 30 minutes after sign-in. The cookie
+requires HTTPS outside local development. Shop memberships are loaded at
+sign-in and included in the token. Sign-out clears the cookie. Any existing
+copy of the token remains valid until expiry, and staff live streams close
+at expiry.
+
 ## Checking SQL
 
 ```bash
@@ -73,8 +91,9 @@ support TypeScript 7 yet.
 - [x] `GET /shop/:shopId/deliveries/:id` - full address and status changes
       (created → paid → shipped → delivered, or cancelled)
 - [x] Datastar on the frontend
-- [ ] Customer entry flow (phone → address → tier selection)
+- [x] Customer entry flow (phone → address → view)
 - [x] Staff dashboard (live queue via SSE)
+- [x] Staff sign-in and shop-level authorization
 - [ ] Session/lead expiry cleanup job
 
 ## Notes

@@ -22,6 +22,7 @@ sql.listen("delivery_changed", (payload) => {
 export function liveDeliveries(
     matches: (change: DeliveryChange) => boolean,
     render: () => Promise<string>,
+    expiresAt?: number,
 ): Response {
     let unsubscribe = () => {};
 
@@ -29,10 +30,22 @@ export function liveDeliveries(
         async (stream) => {
             // Renders run one at a time so patches can't arrive out of order.
             let queue = Promise.resolve();
+            let closed = false;
+            const close = () => {
+                if (closed) return;
+                unsubscribe();
+                stream.close();
+            };
+            const expired = () => expiresAt !== undefined && Date.now() >= expiresAt;
             const push = () => {
                 queue = queue
-                    .then(render)
-                    .then((html) => void stream.patchElements(html))
+                    .then(async () => {
+                        if (closed) return;
+                        if (expired()) return close();
+                        const html = await render();
+                        if (expired()) return close();
+                        if (!closed) stream.patchElements(html);
+                    })
                     .catch((err: unknown) => console.error("live render failed", err));
             };
 
@@ -42,7 +55,12 @@ export function liveDeliveries(
                 }
             };
             listeners.add(listener);
-            unsubscribe = () => listeners.delete(listener);
+            const expiryTimer = expiresAt === undefined ? undefined : setTimeout(close, expiresAt - Date.now());
+            unsubscribe = () => {
+                closed = true;
+                clearTimeout(expiryTimer);
+                listeners.delete(listener);
+            };
 
             push();
             await queue;
